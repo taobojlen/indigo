@@ -20,10 +20,11 @@ import (
 )
 
 type testEnvOpts struct {
-	outboxMode     OutboxMode
-	webhookURL     string
-	retryTimeout   time.Duration
-	eventCacheSize int
+	outboxMode          OutboxMode
+	webhookURL          string
+	retryTimeout        time.Duration
+	eventCacheSize      int
+	disableTrackRecords bool
 }
 
 type testEnv struct {
@@ -44,7 +45,9 @@ func newTestEnv(t *testing.T, opts testEnvOpts) *testEnv {
 
 	ctx, cancel := context.WithCancel(t.Context())
 
-	db, err := SetupDatabase("sqlite://file::memory:?cache=shared", 1)
+	trackRecords := !opts.disableTrackRecords
+
+	db, err := SetupDatabase("sqlite://file::memory:?cache=shared", 1, trackRecords)
 	if err != nil {
 		cancel()
 		t.Fatalf("failed to setup test database: %v", err)
@@ -80,6 +83,7 @@ func newTestEnv(t *testing.T, opts testEnvOpts) *testEnv {
 		DisableAcks:       disableAcks,
 		WebhookURL:        webhookURL,
 		RetryTimeout:      retryTimeout,
+		TrackRecords:      trackRecords,
 	}
 
 	logger := slog.Default().With("test", t.Name())

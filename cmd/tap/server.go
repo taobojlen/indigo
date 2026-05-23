@@ -25,6 +25,7 @@ type TapServer struct {
 	idDir         identity.Directory
 	firehose      *FirehoseProcessor
 	crawler       *Crawler
+	trackRecords  bool
 }
 
 func NewTapServer(logger *slog.Logger, db *gorm.DB, outbox *Outbox, idDir identity.Directory, firehose *FirehoseProcessor, crawler *Crawler, config *TapConfig) *TapServer {
@@ -36,6 +37,7 @@ func NewTapServer(logger *slog.Logger, db *gorm.DB, outbox *Outbox, idDir identi
 		idDir:         idDir,
 		firehose:      firehose,
 		crawler:       crawler,
+		trackRecords:  config.TrackRecords,
 	}
 }
 
@@ -218,7 +220,9 @@ func (ts *TapServer) handleInfoRepo(c echo.Context) error {
 	}
 
 	var recordCount int64
-	ts.db.WithContext(ctx).Model(&models.RepoRecord{}).Where("did = ?", did).Count(&recordCount)
+	if ts.trackRecords {
+		ts.db.WithContext(ctx).Model(&models.RepoRecord{}).Where("did = ?", did).Count(&recordCount)
+	}
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"did":     repo.Did,
@@ -243,8 +247,10 @@ func (ts *TapServer) handleStatsRepoCount(c echo.Context) error {
 func (ts *TapServer) handleStatsRecordCount(c echo.Context) error {
 	ctx := c.Request().Context()
 	var count int64
-	if err := ts.db.WithContext(ctx).Model(&models.RepoRecord{}).Count(&count).Error; err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get record count")
+	if ts.trackRecords {
+		if err := ts.db.WithContext(ctx).Model(&models.RepoRecord{}).Count(&count).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get record count")
+		}
 	}
 	return c.JSON(http.StatusOK, map[string]int64{"record_count": count})
 }

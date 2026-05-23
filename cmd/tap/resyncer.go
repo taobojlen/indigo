@@ -33,6 +33,7 @@ type Resyncer struct {
 	repoFetchTimeout  time.Duration
 	collectionFilters []string
 	parallelism       int
+	trackRecords      bool
 
 	pdsBackoff   map[string]time.Time
 	pdsBackoffMu sync.RWMutex
@@ -47,6 +48,7 @@ func NewResyncer(logger *slog.Logger, db *gorm.DB, repos *RepoManager, events *E
 		repoFetchTimeout:  config.RepoFetchTimeout,
 		collectionFilters: config.CollectionFilters,
 		parallelism:       config.ResyncParallelism,
+		trackRecords:      config.TrackRecords,
 		pdsBackoff:        make(map[string]time.Time),
 	}
 }
@@ -234,17 +236,18 @@ func (r *Resyncer) doResync(ctx context.Context, did string) (bool, error) {
 	rev := commit.Rev
 	r.logger.Info("iterating repo records", "did", did, "rev", rev)
 
-	var existingRecords []models.RepoRecord
-	if err := r.db.WithContext(ctx).Find(&existingRecords, "did = ?", did).Error; err != nil {
-		return false, fmt.Errorf("failed to load existing records: %w", err)
+	existingCids := make(map[string]string)
+	if r.trackRecords {
+		var existingRecords []models.RepoRecord
+		if err := r.db.WithContext(ctx).Find(&existingRecords, "did = ?", did).Error; err != nil {
+			return false, fmt.Errorf("failed to load existing records: %w", err)
+		}
+		for _, rec := range existingRecords {
+			key := rec.Collection + "/" + rec.Rkey
+			existingCids[key] = rec.Cid
+		}
+		r.logger.Info("pre-loaded existing records", "did", did, "count", len(existingCids))
 	}
-
-	existingCids := make(map[string]string, len(existingRecords))
-	for _, rec := range existingRecords {
-		key := rec.Collection + "/" + rec.Rkey
-		existingCids[key] = rec.Cid
-	}
-	r.logger.Info("pre-loaded existing records", "did", did, "count", len(existingCids))
 
 	evtBatch := make([]*RecordEvt, 0, batchSize)
 

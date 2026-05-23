@@ -164,6 +164,12 @@ func run(args []string) error {
 						Value:   60 * time.Second,
 						Sources: cli.EnvVars("TAP_RETRY_TIMEOUT"),
 					},
+					&cli.BoolFlag{
+						Name:    "track-records",
+						Usage:   "store per-record state in the RepoRecord table for incremental resync; set false if downstream consumer dedupes/handles deletes itself",
+						Value:   true,
+						Sources: cli.EnvVars("TAP_TRACK_RECORDS"),
+					},
 					&cli.StringFlag{
 						Name:    "log-level",
 						Usage:   "log verbosity level (debug, info, warn, error)",
@@ -225,6 +231,7 @@ func runTap(ctx context.Context, cmd *cli.Command) error {
 		OutboxOnly:                 cmd.Bool("outbox-only"),
 		AdminPassword:              cmd.String("admin-password"),
 		RetryTimeout:               cmd.Duration("retry-timeout"),
+		TrackRecords:               cmd.Bool("track-records"),
 	}
 
 	logger.Info("creating tap service")

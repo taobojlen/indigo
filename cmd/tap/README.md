@@ -92,6 +92,7 @@ Environment variables or CLI flags:
 - `TAP_OUTBOX_ONLY`: run in outbox-only mode (no firehose, resync, or enumeration) (default: `false`)
 - `TAP_ADMIN_PASSWORD`: Basic auth admin password required for all requests (if set)
 - `TAP_RETRY_TIMEOUT`: timeout before retrying unacked events (default: `60s`)
+- `TAP_TRACK_RECORDS`: store per-record state in the `RepoRecord` table for incremental resync and implicit delete detection; set `false` if your downstream consumer dedupes itself and handles deletes via live events (default: `true`). Disabling eliminates Tap's largest table at the cost of non-incremental resyncs (every record re-emits as a "create" on each resync).
 - `TAP_LOG_LEVEL`: log verbosity (`debug`, `info`, `warn`, `error`, default: `info`)
 - `TAP_METRICS_LISTEN`: address for metrics/pprof server (disabled if empty)
 

@@ -26,15 +26,18 @@ type EventManager struct {
 	cacheLk sync.RWMutex
 
 	pendingIDs chan uint
+
+	trackRecords bool
 }
 
 func NewEventManager(logger *slog.Logger, db *gorm.DB, config *TapConfig) *EventManager {
 	return &EventManager{
-		logger:     logger.With("component", "event_manager"),
-		db:         db,
-		cacheSize:  config.EventCacheSize,
-		cache:      make(map[uint]*OutboxEvt),
-		pendingIDs: make(chan uint, config.EventCacheSize*2), // give us some buffer room in channel since we can overshoot
+		logger:       logger.With("component", "event_manager"),
+		db:           db,
+		cacheSize:    config.EventCacheSize,
+		cache:        make(map[uint]*OutboxEvt),
+		pendingIDs:   make(chan uint, config.EventCacheSize*2), // give us some buffer room in channel since we can overshoot
+		trackRecords: config.TrackRecords,
 	}
 }
 
@@ -206,19 +209,21 @@ func (em *EventManager) AddRecordEvents(ctx context.Context, evts []*RecordEvt, 
 	evtIDs := make([]uint, 0, len(evts))
 
 	for _, evt := range evts {
-		if evt.Action == "delete" {
-			toDel = append(toDel, &models.RepoRecord{
-				Did:        evt.Did,
-				Collection: evt.Collection,
-				Rkey:       evt.Rkey,
-			})
-		} else {
-			toPut = append(toPut, &models.RepoRecord{
-				Did:        evt.Did,
-				Collection: evt.Collection,
-				Rkey:       evt.Rkey,
-				Cid:        evt.Cid,
-			})
+		if em.trackRecords {
+			if evt.Action == "delete" {
+				toDel = append(toDel, &models.RepoRecord{
+					Did:        evt.Did,
+					Collection: evt.Collection,
+					Rkey:       evt.Rkey,
+				})
+			} else {
+				toPut = append(toPut, &models.RepoRecord{
+					Did:        evt.Did,
+					Collection: evt.Collection,
+					Rkey:       evt.Rkey,
+					Cid:        evt.Cid,
+				})
+			}
 		}
 
 		evtID := uint(em.nextID.Add(1))

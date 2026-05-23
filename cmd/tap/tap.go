@@ -52,10 +52,16 @@ type TapConfig struct {
 	OutboxOnly                 bool
 	AdminPassword              string
 	RetryTimeout               time.Duration
+	// TrackRecords controls whether per-record state is stored in the RepoRecord
+	// table. When false, Tap skips RepoRecord writes, lookups, and migration —
+	// suitable for downstream consumers that maintain their own record store
+	// (e.g. ClickHouse with ReplacingMergeTree). Resyncs become non-incremental:
+	// every record in the repo re-emits as a "create" event.
+	TrackRecords bool
 }
 
 func NewTap(config TapConfig) (*Tap, error) {
-	db, err := SetupDatabase(config.DatabaseURL, config.DBMaxConns)
+	db, err := SetupDatabase(config.DatabaseURL, config.DBMaxConns, config.TrackRecords)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +138,7 @@ func (t *Tap) CloseDb(ctx context.Context) error {
 	return nil
 }
 
-func SetupDatabase(dbUrl string, maxConns int) (*gorm.DB, error) {
+func SetupDatabase(dbUrl string, maxConns int, trackRecords bool) (*gorm.DB, error) {
 	// Setup database connection (supports both SQLite and Postgres)
 	var dialector gorm.Dialector
 	isSqlite := false
@@ -173,7 +179,11 @@ func SetupDatabase(dbUrl string, maxConns int) (*gorm.DB, error) {
 
 	}
 
-	if err := db.AutoMigrate(&models.Repo{}, &models.RepoRecord{}, &models.OutboxBuffer{}, &models.ResyncBuffer{}, &models.FirehoseCursor{}, &models.ListReposCursor{}, &models.CollectionCursor{}); err != nil {
+	migrateModels := []any{&models.Repo{}, &models.OutboxBuffer{}, &models.ResyncBuffer{}, &models.FirehoseCursor{}, &models.ListReposCursor{}, &models.CollectionCursor{}}
+	if trackRecords {
+		migrateModels = append(migrateModels, &models.RepoRecord{})
+	}
+	if err := db.AutoMigrate(migrateModels...); err != nil {
 		return nil, err
 	}
 
